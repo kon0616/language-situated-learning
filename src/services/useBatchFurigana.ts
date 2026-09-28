@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FuriganaPart, LanguageNode } from "../types/language.ts";
 import { hasCompleteFurigana, needsFurigana, normalizeFurigana } from "./furigana.ts";
+import { apiFetch } from "./apiClient.ts";
 
 export function useBatchFurigana(nodes: LanguageNode[], save: (id: string, reading: string, parts: FuriganaPart[]) => void) {
   const [busy, setBusy] = useState(false);
@@ -20,7 +21,7 @@ export function useBatchFurigana(nodes: LanguageNode[], save: (id: string, readi
         if (stop.current) break;
         setMessage(`正在处理 ${index + 1} / ${pending.length}：${node.expression}`);
         try {
-          const response = await fetch("/api/furigana", { method: "POST", headers: { "Content-Type": "application/json" },
+          const response = await apiFetch("/api/furigana", { method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ expression: node.expression }) });
           const result = await response.json() as { reading?: string; furigana?: FuriganaPart[]; error?: string };
           const parts = normalizeFurigana(result.furigana, node.expression);

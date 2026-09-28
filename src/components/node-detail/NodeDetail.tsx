@@ -9,6 +9,7 @@ import type {
 } from "../../types/language";
 import { FuriganaText } from "../FuriganaText.tsx";
 import { languageName } from "../../services/languages.ts";
+import { apiFetch } from "../../services/apiClient.ts";
 import { statusLabels, typeLabels } from "../../types/language";
 import {
   contextNames,
@@ -49,7 +50,7 @@ export default function NodeDetail({
   async function generateReading() {
     setReadingBusy(true); setReadingMessage("");
     try {
-      const response = await fetch("/api/furigana", { method: "POST", headers: { "Content-Type": "application/json" },
+      const response = await apiFetch("/api/furigana", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expression: node.expression }) });
       const result = await response.json() as { reading?: string; furigana?: FuriganaPart[]; error?: string };
       if (!response.ok || !result.furigana) throw new Error(result.error || "注音失败。");

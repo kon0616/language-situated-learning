@@ -35,6 +35,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createDeepSeekMiddleware } from "../src/server/deepseek.ts";
 import { guessLanguage } from "../src/services/languages.ts";
 import { languageView } from "../src/services/languageView.ts";
+import { handleHostedApi, hostedApiRoutes } from "../src/server/hostedApi.ts";
+import { clearHostedApiKey, hostedApiStatus, saveHostedApiConfig } from "../src/services/apiClient.ts";
 
 test("existing mock transcript suggests all three lenses", async () => {
   const nodes = await extractLanguage(sampleTranscript);
@@ -264,6 +266,60 @@ test("DeepSeek adapter sends JSON mode and validates material analysis without a
   assert.equal(analysis.expressions[0].contextLabels[0], "部分同意后反驳");
   assert.equal(analysis.groups[0].expressionIndexes[0], 0);
   assert.throws(() => normalizeMaterialAnalysis({ summary: "x" }, rawText));
+});
+
+test("hosted API requires a per-request key and handles detection and one analysis chunk", async () => {
+  assert.deepEqual(hostedApiRoutes, ["/api/detect-language", "/api/analyze-chunk", "/api/furigana"]);
+  const url = "https://example.netlify.app/api/analyze-chunk";
+  const input = { rawText: "We can work out a plan.", title: "Plan", sourceType: "conversation", targetLanguage: "en" };
+  const request = (path: string, headers: Record<string, string> = {}) => new Request(`https://example.netlify.app${path}`,
+    { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(input) });
+  assert.equal((await handleHostedApi(request("/api/analyze-chunk"))).status, 401);
+  assert.equal((await handleHostedApi(request("/api/analyze-chunk", { origin: "https://other.example", "x-deepseek-key": "test-key" }))).status, 403);
+  assert.equal((await handleHostedApi(new Request(url, { method: "GET" }))).status, 405);
+
+  const calls: string[] = [];
+  const fakeFetch = async (target: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(target, DEEPSEEK_ENDPOINT);
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer test-key");
+    const body = JSON.parse(String(init?.body));
+    calls.push(body.model);
+    const content = body.max_tokens === 250
+      ? { primary: "en", languages: ["en"], confidence: "high" }
+      : { summary: "计划", groups: [], expressions: [{ expression: "work out a plan", type: "collocation",
+        sourceContext: input.rawText, contextLabels: ["计划"], domainLabels: ["General"], functionLabels: ["解决"] }] };
+    return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(content) } }] });
+  };
+  const headers = { origin: "https://example.netlify.app", "x-deepseek-key": "test-key", "x-deepseek-model": "test-model" };
+  const detection = await handleHostedApi(request("/api/detect-language", headers), fakeFetch as typeof fetch);
+  assert.equal((await detection.json()).primary, "en");
+  const analysis = await handleHostedApi(request("/api/analyze-chunk", headers), fakeFetch as typeof fetch);
+  assert.equal((await analysis.json()).analysis.expressions[0].sourceContext, input.rawText);
+  assert.deepEqual(calls, ["test-model", "test-model"]);
+  assert.equal(analysis.headers.get("Cache-Control"), "no-store");
+});
+
+test("hosted API configuration stays in browser storage and never echoes the key", () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+    getItem: (key: string) => values.get(key) || null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  } });
+  try {
+    assert.equal(hostedApiStatus().configured, false);
+    const saved = saveHostedApiConfig("test-private-key", "deepseek-chat");
+    assert.equal(saved.configured, true);
+    assert.equal(saved.model, "deepseek-chat");
+    assert.equal(JSON.stringify(saved).includes("test-private-key"), false);
+    assert.equal(hostedApiStatus().configured, true);
+    assert.equal(saveHostedApiConfig("", "deepseek-reasoner").configured, true);
+    assert.equal(clearHostedApiKey().configured, false);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
 });
 
 test("long material is analyzed in chunks and all distinct expressions remain available", async () => {

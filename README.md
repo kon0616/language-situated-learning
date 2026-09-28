@@ -13,7 +13,7 @@ npm run dev
 
 默认地址为 `http://127.0.0.1:5173/`。运行 `npm test`、`npm run typecheck`、`npm run build` 验证。
 
-Netlify 部署使用根目录的 `netlify.toml` 执行 `npm run build`，并只发布 `dist`。线上静态页面可以查看和保存浏览器本地材料；目前 `/api` 仅由本地 Vite 服务提供，所以线上 AI 配置、自动分析和批量注音尚不能使用。`localhost` 与 Netlify 域名的浏览器存储互不共享，已有本地材料不会自动出现在部署站点。
+Netlify 部署使用根目录的 `netlify.toml` 执行 `npm run build`，发布 `dist`，并部署 `netlify/functions/deepseek.mts` 提供线上分析与注音。线上 API Key 和模型只保存在当前浏览器的网站存储中；每次请求通过本站 Netlify Function 转发到 DeepSeek，密钥不会写入 GitHub 或作为全站共享的服务端配置。共用设备上请在 AI 配置中删除密钥。线上长材料按较小片段逐次分析，以适应函数的执行时限。`localhost` 与 Netlify 域名的浏览器存储互不共享，已有本地材料和 API Key 不会自动出现在部署站点。
 
 ## DeepSeek 材料分析
 
@@ -23,7 +23,7 @@ Netlify 部署使用根目录的 `netlify.toml` 执行 `npm run build`，并只�
 
 如果某一段的模型输出被截断，服务会自动把该段再拆小并重试，已经完成的段落不会在本次分析中重复请求。重试也可能增加 API 请求次数；如果极短片段仍被截断，界面会提示检查自定义提示词。
 
-默认接口为 `https://api.deepseek.com/chat/completions`，模型为 `deepseek-flash`。API Key 与模型保存在本机项目的 `.language-web/api.json` 中，不写入浏览器存储，重启服务后自动加载。此文件包含明文密钥，已加入 Git 忽略并禁止通过开发服务器访问；不要分享该目录。也可复制 `.env.example` 为 `.env` 并填写 `DEEPSEEK_API_KEY`。模型也可通过 `DEEPSEEK_MODEL` 设置。提示词只保存在当前浏览器，分析时随材料发送给本机服务，再由本机服务请求 DeepSeek。原始材料同样只会在主动点击分析时发送。请在本机运行 `npm run dev` 或 `npm run preview` 使用此 API 入口；单独打开构建出的静态文件没有本机 API 服务。
+默认接口为 `https://api.deepseek.com/chat/completions`，模型为 `deepseek-flash`。本地开发时，API Key 与模型保存在本机项目的 `.language-web/api.json` 中，不写入浏览器存储，重启服务后自动加载。此文件包含明文密钥，已加入 Git 忽略并禁止通过开发服务器访问；不要分享该目录。也可复制 `.env.example` 为 `.env` 并填写 `DEEPSEEK_API_KEY`。模型也可通过 `DEEPSEEK_MODEL` 设置。线上版则把各自的 Key 保存在各自浏览器，并在主动分析或注音时发往本站函数和 DeepSeek。提示词也只保存在当前浏览器，原始材料只会在主动点击分析时发送。浏览器本地数据没有云同步或备份。
 
 ## 材料与表达
 
