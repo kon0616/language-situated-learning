@@ -23,9 +23,12 @@ import { useBatchFurigana } from "./services/useBatchFurigana";
 import { languageView } from "./services/languageView.ts";
 import { languageName } from "./services/languages.ts";
 import { deleteMaterial } from "./services/deleteMaterial.ts";
+import { useInboxDraft } from "./services/useInboxDraft.ts";
 type Page = "web" | "inbox" | "materials" | "reactivate" | "settings";
 export default function App() {
   const [initial] = useState(() => storage.load());
+  const [storageReady, setStorageReady] = useState(false);
+  const inboxDraft = useInboxDraft();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem("language-web.sidebar-collapsed") === "true"; } catch { return false; }
   });
@@ -51,7 +54,10 @@ export default function App() {
     [page, setPage] = useState<Page>("web"),
     [selected, setSelected] = useState(initial.data.languageNodes[0]?.id || ""),
     [notice, setNotice] = useState(""),
-    [storageError, setStorageError] = useState(initial.warning || "");
+    [storageError, setStorageError] = useState("");
+  const [storageBlocked, setStorageBlocked] = useState(false);
+  const [savingMaterial, setSavingMaterial] = useState(false);
+  const saveLock = useRef(false);
   const [webLens, setWebLens] = useState<WebLens>("today"),
     [webCategory, setWebCategory] = useState(""),
     [exploreTarget, setExploreTarget] = useState<string | null>(null),
@@ -67,13 +73,26 @@ export default function App() {
       ? { ...n, encounterCount: (n.encounterCount || 0) + 1, lastEncounteredAt: at } : n) }));
   }
   useEffect(() => {
-    if (initial.warning) return;
-    if (!storage.save(data))
-      setStorageError(
-        "浏览器存储不可用或空间已满。本次修改尚未持久保存，请勿刷新。",
-      );
-    else setStorageError("");
-  }, [data, initial.warning]);
+    let cancelled = false;
+    void storage.loadPersistent().then(loaded => {
+      if (cancelled) return;
+      setData(loaded.data);
+      setSelected(loaded.data.languageNodes[0]?.id || "");
+      if (loaded.warning) { setStorageError(loaded.warning); setStorageBlocked(true); }
+      setStorageReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    if (!storageReady || storageBlocked) return;
+    let cancelled = false;
+    void storage.savePersistent(data).then(() => {
+      if (!cancelled) setStorageError("");
+    }).catch(() => {
+      if (!cancelled) setStorageError("浏览器存储不可用或空间已满。本次修改尚未持久保存，请勿刷新。");
+    });
+    return () => { cancelled = true; };
+  }, [data, storageReady, storageBlocked]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 5000);
@@ -101,9 +120,26 @@ export default function App() {
     setSelectedMaterial(null); setSelectedExpression(null); setExploreTarget(null); setWebCategory("");
     try { localStorage.setItem("language-web.active-language", code); } catch { /* This preference is optional. */ }
   }
-  function save(incoming: LanguageNode[], source: Source) {
+  async function save(incoming: LanguageNode[], source: Source) {
+    if (saveLock.current) return;
     const result = saveExtraction(data, incoming, source);
+    if (storageBlocked) {
+      setStorageError("现有数据无法读取，保存已暂停以保护原始存储。请先检查浏览器数据。");
+      return;
+    }
+    saveLock.current = true;
+    setSavingMaterial(true);
+    try { await storage.savePersistent(result.data); }
+    catch {
+      setStorageError("保存失败：浏览器存储不可用或空间已满。材料仍在收件箱中，请勿刷新。");
+      saveLock.current = false;
+      setSavingMaterial(false);
+      return;
+    }
+    saveLock.current = false;
+    setSavingMaterial(false);
     setData(result.data);
+    inboxDraft.reset();
     chooseLanguage(source.language || "ja");
     if (result.firstId) setSelected(result.firstId);
     setSelectedMaterial(source.id);
@@ -146,6 +182,7 @@ export default function App() {
   const natural = viewData.languageNodes.filter(
     (n) => n.status === "spontaneous",
   ).length;
+  if (!storageReady) return <div className="content-page" role="status">正在读取本地材料…</div>;
   return (
     <div className={`app-shell${showFurigana ? "" : " hide-furigana"}${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className="sidebar" aria-label="主菜单">
@@ -208,6 +245,8 @@ export default function App() {
                 {item.label}
                 <small>{item.en}</small>
               </span>
+              {item.id === "inbox" && inboxDraft.busy && <span className="nav-task-status" title="材料分析进行中">分析中</span>}
+              {item.id === "inbox" && !inboxDraft.busy && inboxDraft.results.length > 0 && page !== "inbox" && <span className="nav-task-status" title="分析结果待保存">待保存</span>}
               {page === item.id && <span className="nav-mark" />}
             </button>
           ))}
@@ -283,7 +322,7 @@ export default function App() {
             onSource={(id) => { setSelectedMaterial(id); setSelectedExpression(null); setPage("materials"); }}
           />
         )}{" "}
-        {page === "inbox" && <InboxPage data={data} activeLanguage={activeLanguage} onSave={save} />}{" "}
+        {page === "inbox" && <InboxPage data={data} activeLanguage={activeLanguage} onSave={save} draft={inboxDraft} saving={savingMaterial} />}{" "}
         {page === "settings" && <SettingsPage batchFurigana={batchFurigana} />}{" "}
         {page === "materials" && <MaterialsPage data={viewData} selectedId={selectedMaterial} expressionId={selectedExpression}
           onSelect={(id) => { setSelectedMaterial(id); setSelectedExpression(null); }}

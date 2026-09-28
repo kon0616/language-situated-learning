@@ -13,6 +13,44 @@ import {
 } from "../data/taxonomy.ts";
 const KEY_V1 = "language-web.v1",
   KEY_V2 = "language-web.v2";
+const DATABASE = "language-web-data";
+const STORE = "snapshots";
+
+function openDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DATABASE, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error("数据库被其他页面占用"));
+  });
+}
+
+async function readDatabase(): Promise<string | undefined> {
+  const db = await openDatabase();
+  try {
+    return await new Promise<string | undefined>((resolve, reject) => {
+      const request = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY_V2);
+      request.onsuccess = () => resolve(request.result as string | undefined);
+      request.onerror = () => reject(request.error);
+    });
+  } finally { db.close(); }
+}
+
+async function writeDatabase(value: string): Promise<void> {
+  const db = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE, "readwrite");
+      transaction.objectStore(STORE).put(value, KEY_V2);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally { db.close(); }
+}
+
+let writeQueue: Promise<void> = Promise.resolve();
 interface OldNode extends Omit<
   LanguageNode,
   "contextIds" | "domainIds" | "functionIds"
@@ -142,6 +180,37 @@ export function migrateV1(old: OldData): AppData {
   return hydrate(data);
 }
 export const storage = {
+  async loadPersistent(): Promise<{ data: AppData; warning?: string; needsSave?: boolean }> {
+    if (typeof indexedDB !== "undefined") {
+      try {
+        const raw = await readDatabase();
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!validV2(parsed)) throw new Error("invalid IndexedDB data");
+          return { data: hydrate(parsed) };
+        }
+      } catch {
+        // A readable localStorage snapshot may still be available.
+        const fallback = storage.load();
+        if (!fallback.warning && !fallback.needsSave) return fallback;
+        return { ...fallback, warning: "浏览器数据库无法读取；现有数据未被覆盖。请先备份或检查浏览器存储设置。" };
+      }
+    }
+    return storage.load();
+  },
+  savePersistent(data: AppData): Promise<void> {
+    const serialized = JSON.stringify(data);
+    const write = async () => {
+      if (typeof indexedDB !== "undefined") {
+        await writeDatabase(serialized);
+        return;
+      }
+      localStorage.setItem(KEY_V2, serialized);
+    };
+    const pending = writeQueue.then(write, write);
+    writeQueue = pending.catch(() => {});
+    return pending;
+  },
   load(): { data: AppData; warning?: string; needsSave?: boolean } {
     try {
       const raw2 = localStorage.getItem(KEY_V2);

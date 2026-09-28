@@ -1,55 +1,27 @@
-import { useState } from "react";
 import { ArrowRight, Sparkles, Trash2, FileText } from "lucide-react";
 import { sampleTranscript } from "../data/seed";
-import { analyzeMaterial } from "../services/materialAnalysis";
-import { getMaterialPrompt } from "../services/promptSettings";
 import type { AppData, LanguageNode, Source } from "../types/language";
-import type { MaterialAnalysisResult } from "../types/materialAnalysis";
-import { commonLanguages, guessLanguage, languageCode, languageName } from "../services/languages.ts";
+import type { InboxDraft } from "../services/useInboxDraft.ts";
+import { commonLanguages, guessLanguage, languageName } from "../services/languages.ts";
 export default function InboxPage({
   data,
   activeLanguage,
   onSave,
+  draft,
+  saving,
 }: {
   data: AppData;
   activeLanguage: string;
-  onSave: (nodes: LanguageNode[], source: Source) => void;
+  onSave: (nodes: LanguageNode[], source: Source) => Promise<void>;
+  draft: InboxDraft;
+  saving: boolean;
 }) {
-  const [raw, setRaw] = useState(""),
-    [title, setTitle] = useState(""),
-    [type, setType] = useState<Source["type"]>("voice room"),
-    [date, setDate] = useState(new Date().toLocaleDateString("en-CA")),
-    [results, setResults] = useState<LanguageNode[]>([]),
-    [chosen, setChosen] = useState<Set<string>>(new Set()),
-    [busy, setBusy] = useState(false),
-    [message, setMessage] = useState(""),
-    [extractedRaw, setExtractedRaw] = useState(""),
-    [analysis, setAnalysis] = useState<MaterialAnalysisResult | null>(null);
-  const [targetLanguage, setTargetLanguage] = useState("und");
-  const [otherLanguage, setOtherLanguage] = useState("");
-  const [explanationLanguage, setExplanationLanguage] = useState("zh");
+  const { raw, setRaw, title, setTitle, type, setType, date, setDate,
+    results, setResults, chosen, setChosen, busy, message, setMessage,
+    extractedRaw, analysis, targetLanguage, setTargetLanguage,
+    otherLanguage, setOtherLanguage, explanationLanguage, setExplanationLanguage,
+    clearAnalysis } = draft;
   const guessed = guessLanguage(raw);
-  const requestedLanguage = targetLanguage === "other" ? languageCode(otherLanguage) : targetLanguage;
-  async function extract() {
-    setBusy(true);
-    setMessage("");
-    try {
-      if (targetLanguage === "other" && requestedLanguage === "und") throw new Error("请输入有效的语言代码，例如 es、de 或 pt-BR。");
-      const result = await analyzeMaterial(raw, title, type, data, getMaterialPrompt(), requestedLanguage, explanationLanguage);
-      setAnalysis(result);
-      setResults(result.nodes);
-      setChosen(new Set(result.nodes.map((n) => n.id)));
-      setExtractedRaw(raw);
-      if (!result.nodes.length)
-        setMessage(
-          result.mode === "mock" ? "本地 Mock 尚未匹配到表达。可在 AI 配置填写 DeepSeek API Key，以分析其他材料。" : "这份材料没有提取到合适表达。原文仍可保留，或调整提示词后重试。",
-        );
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "提取失败，请重试。");
-    } finally {
-      setBusy(false);
-    }
-  }
   function edit(
     id: string,
     key:
@@ -103,13 +75,12 @@ export default function InboxPage({
             </h2>
             <button
               className="text-button"
+              disabled={busy}
               onClick={() => {
                 setRaw(sampleTranscript);
                 setTargetLanguage("und");
                 setTitle("日语语音房 · 关于讨论");
-                setResults([]);
-                setAnalysis(null);
-                setMessage("");
+                clearAnalysis();
               }}
             >
               使用日语示例
@@ -121,11 +92,10 @@ export default function InboxPage({
               className="raw-input"
               placeholder="粘贴聊天、转写、字幕或文章中的真实语言……"
               value={raw}
+              disabled={busy}
               onChange={(e) => {
                 setRaw(e.target.value);
-                setResults([]);
-                setAnalysis(null);
-                setMessage("");
+                clearAnalysis();
               }}
             />
           </label>
@@ -138,13 +108,13 @@ export default function InboxPage({
             <span>当前空间：{languageName(activeLanguage)}</span>
           </div>
           <div className="metadata language-inputs">
-            <label className="field"><span>本次学习语言</span><select aria-label="本次学习语言" value={targetLanguage} onChange={e => { setTargetLanguage(e.target.value); setResults([]); setAnalysis(null); }}>
+            <label className="field"><span>本次学习语言</span><select disabled={busy} aria-label="本次学习语言" value={targetLanguage} onChange={e => { setTargetLanguage(e.target.value); clearAnalysis(); }}>
               <option value="und">自动识别</option>
               {commonLanguages.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
               <option value="other">其他语言代码…</option>
             </select></label>
-            {targetLanguage === "other" && <label className="field"><span>语言代码</span><input aria-label="语言代码" value={otherLanguage} onChange={e => { setOtherLanguage(e.target.value); setResults([]); setAnalysis(null); }} placeholder="例如 nl、id、pt-BR"/></label>}
-            <label className="field"><span>释义语言</span><select aria-label="释义语言" value={explanationLanguage} onChange={e => { setExplanationLanguage(e.target.value); setResults([]); setAnalysis(null); }}>
+            {targetLanguage === "other" && <label className="field"><span>语言代码</span><input disabled={busy} aria-label="语言代码" value={otherLanguage} onChange={e => { setOtherLanguage(e.target.value); clearAnalysis(); }} placeholder="例如 nl、id、pt-BR"/></label>}
+            <label className="field"><span>释义语言</span><select disabled={busy} aria-label="释义语言" value={explanationLanguage} onChange={e => { setExplanationLanguage(e.target.value); clearAnalysis(); }}>
               <option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option>
             </select></label>
           </div>
@@ -154,12 +124,14 @@ export default function InboxPage({
               <input
                 placeholder="例如：周五的语音讨论"
                 value={title}
+                disabled={busy}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </label>
             <label className="field">
               <span>来源类型</span>
               <select
+                disabled={busy}
                 value={type}
                 onChange={(e) => setType(e.target.value as Source["type"])}
               >
@@ -180,6 +152,7 @@ export default function InboxPage({
               <input
                 type="date"
                 value={date}
+                disabled={busy}
                 onChange={(e) => setDate(e.target.value)}
               />
             </label>
@@ -187,12 +160,13 @@ export default function InboxPage({
           <button
             className="primary"
             disabled={!raw.trim() || busy}
-            onClick={extract}
+            onClick={() => void draft.extract(data)}
           >
             <Sparkles size={17} />
             {busy ? "正在分析材料…" : "分析材料并提取语言"}
             <ArrowRight size={17} />
           </button>
+          {busy && <p role="status" className="small muted">分析仍在进行，可以切换到其他页面；完成后回到收件箱查看结果。</p>}
           <p className="small muted">
             未配置 API 时使用本地示例匹配；配置 DeepSeek 后，会逐段分析这份材料并发送给 DeepSeek。长材料可能产生多次 API 请求。
           </p>
@@ -243,7 +217,7 @@ export default function InboxPage({
             </div>
             <button
               className="primary"
-              disabled={!valid.length || !date}
+              disabled={!valid.length || !date || saving}
               onClick={() =>
                 onSave(valid, {
                   id: crypto.randomUUID(),
@@ -256,7 +230,7 @@ export default function InboxPage({
                 })
               }
             >
-              保存材料与表达 · {valid.length}
+              {saving ? "正在保存材料…" : `保存材料与表达 · ${valid.length}`}
               <ArrowRight size={17} />
             </button>
           </div>

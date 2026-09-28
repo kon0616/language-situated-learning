@@ -213,6 +213,26 @@ test("storage migrates legacy key without removing it and persists v2 roundtrip"
   assert.ok(storage.load().warning);
   assert.equal(values.get("language-web.v2"), "{bad");
 });
+
+test("persistent storage restores saved materials and reports a failed write", async () => {
+  const values = new Map<string, string>();
+  let writable = true;
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+    getItem: (key: string) => values.get(key) || null,
+    setItem: (key: string, value: string) => {
+      if (!writable) throw new Error("QuotaExceededError");
+      values.set(key, value);
+    },
+  } });
+  const data = createSeed();
+  data.sources.push({ id: "persisted-material", language: "en", title: "Saved article",
+    type: "article", date: "2026-09-28", rawText: "A real source paragraph." });
+  await storage.savePersistent(data);
+  assert.equal((await storage.loadPersistent()).data.sources.at(-1)?.id, "persisted-material");
+  writable = false;
+  await assert.rejects(storage.savePersistent(data), /QuotaExceededError/);
+  assert.equal((await storage.loadPersistent()).data.sources.at(-1)?.id, "persisted-material");
+});
 test("saving a repeated expression keeps one node and links both materials", () => {
   const initial = createSeed();
   const original = initial.languageNodes[0];

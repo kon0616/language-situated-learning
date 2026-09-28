@@ -1504,6 +1504,15 @@ blockquote {
   .reencounter-detail-panel { position:fixed; z-index:61; top:0; right:0; width:min(420px,100vw); height:100vh; padding:10px; background:#f5f8f5; box-shadow:-12px 0 30px #18312624; }
   .reencounter-detail-panel .detail { max-height:calc(100vh - 20px); height:100%; }
 }
+.nav-task-status {
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #e7f1e9;
+  color: #2b695b;
+  font-size: 10px;
+  white-space: nowrap;
+}
 .archive-echo { padding:19px 22px; margin:12px 0; border:1px solid #e1e8e0; border-radius:9px; background:#fff; }
 .archive-echo p { margin:10px 0; line-height:1.8; white-space:pre-wrap; }
 .archive-echo div { display:flex; flex-wrap:wrap; gap:7px; }
