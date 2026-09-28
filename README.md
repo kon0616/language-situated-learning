@@ -13,6 +13,8 @@ npm run dev
 
 默认地址为 `http://127.0.0.1:5173/`。运行 `npm test`、`npm run typecheck`、`npm run build` 验证。
 
+Netlify 部署使用根目录的 `netlify.toml` 执行 `npm run build`，并只发布 `dist`。线上静态页面可以查看和保存浏览器本地材料；目前 `/api` 仅由本地 Vite 服务提供，所以线上 AI 配置、自动分析和批量注音尚不能使用。`localhost` 与 Netlify 域名的浏览器存储互不共享，已有本地材料不会自动出现在部署站点。
+
 ## DeepSeek 材料分析
 
 在左侧 **AI 配置** 中填写 DeepSeek API Key、模型，并编辑「材料分析与归类提示词」，点击「保存配置」。回到 Inbox，粘贴材料，选择「自动识别」或手动指定本次学习语言，再选择释义语言，点击「分析材料并提取语言」。服务会识别材料中的语言，按本次学习语言提取表达，给出材料概览和 Context、Domain、Function 建议。混合材料的检测语言会一并显示；手动指定的学习语言与实际材料语言分开记录。逐条检查、编辑或取消勾选后再保存到材料库。没有配置 Key 时，Inbox 仍可用本地日语 Mock 示例提取。
