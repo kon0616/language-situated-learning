@@ -154,6 +154,19 @@ export default function App() {
     setSelected(""); setSelectedMaterial(null); setSelectedExpression(null);
     setNotice(`已删除「${source.title}」及其独有表达；其他材料共享的表达已保留。`);
   }
+  async function renameMaterial(id: string, title: string): Promise<boolean> {
+    const name = title.trim();
+    if (!name || storageBlocked || !data.sources.some(source => source.id === id)) return false;
+    const next = { ...data, sources: data.sources.map(source => source.id === id ? { ...source, title: name } : source) };
+    try { await storage.savePersistent(next); }
+    catch {
+      setStorageError("名称保存失败：浏览器存储不可用或空间已满。请勿刷新。");
+      return false;
+    }
+    setData(current => ({ ...current, sources: current.sources.map(source => source.id === id ? { ...source, title: name } : source) }));
+    setNotice("材料名称已更新。");
+    return true;
+  }
   function showToday(ids: string[]) {
     const date = new Date().toLocaleDateString("en-CA");
     recordExposure(`today:${date}:${ids.join("|")}`, ids);
@@ -327,6 +340,7 @@ export default function App() {
         {page === "materials" && <MaterialsPage data={viewData} selectedId={selectedMaterial} expressionId={selectedExpression}
           onSelect={(id) => { setSelectedMaterial(id); setSelectedExpression(null); }}
           onDelete={removeMaterial}
+          onRename={renameMaterial}
           onOpenExpression={(id) => openInMaterials(id, selectedMaterial)} onCloseExpression={() => setSelectedExpression(null)}
           onStatus={status} onReading={reading} onContext={(id) => goLens("context", id)} onDomain={(id) => goLens("domain", id)}
           onExplore={(id) => { setSelected(id); setExploreTarget(id); setWebLens("explore"); setPage("web"); }} />}{" "}

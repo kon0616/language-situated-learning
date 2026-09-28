@@ -1554,6 +1554,12 @@ blockquote {
 .materials-back { display:flex; align-items:center; gap:6px; margin-bottom:20px; }
 .material-detail-head { margin:0 0 32px; }.material-detail-head h2 { margin:8px 0; font-size:29px; color:#365542; }.material-detail-head p { color:#819486; font-size:13px; }
 .material-detail-title { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.material-title-display, .material-title-editor { display:flex; align-items:center; flex-wrap:wrap; gap:10px; min-width:0; }
+.material-title-display h2 { overflow-wrap:anywhere; }
+.material-title-editor { flex:1; }
+.material-title-editor input { flex:1; min-width:min(240px,100%); padding:10px 12px; border:1px solid #a9c8af; border-radius:7px; background:#fff; color:#365542; font-size:18px; }
+.material-rename-button { display:inline-flex; align-items:center; gap:6px; padding:8px 11px; border:1px solid #cfe0d2; border-radius:7px; color:#477255; background:#fff; font-size:12px; white-space:nowrap; }
+.material-rename-button:hover { background:#f0f7f1; border-color:#9fbea5; }
 .material-delete-button { display:inline-flex; align-items:center; gap:6px; padding:8px 11px; border:1px solid #e6d9d5; border-radius:7px; color:#9b5d52; background:#fff; font-size:12px; }
 .material-delete-button:hover { background:#fff7f5; border-color:#d9b7ae; }
 .material-delete-confirm { max-width:700px; margin-top:15px; padding:16px 18px; border:1px solid #e9c9c0; border-radius:9px; background:#fff9f7; }

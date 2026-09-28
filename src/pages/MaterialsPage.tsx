@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, FileText, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Pencil, Search, Trash2 } from "lucide-react";
 import type { AppData, FuriganaPart, Status } from "../types/language.ts";
 import NodeDetail from "../components/node-detail/NodeDetail.tsx";
 import { AnnotatedJapanese, FuriganaText } from "../components/FuriganaText.tsx";
 import { languageName } from "../services/languages.ts";
 
-export default function MaterialsPage({ data, selectedId, expressionId, onSelect, onDelete, onOpenExpression, onCloseExpression, onStatus, onReading, onContext, onDomain, onExplore }: {
+export default function MaterialsPage({ data, selectedId, expressionId, onSelect, onDelete, onRename, onOpenExpression, onCloseExpression, onStatus, onReading, onContext, onDomain, onExplore }: {
   data: AppData;
   selectedId: string | null;
   expressionId: string | null;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, title: string) => Promise<boolean>;
   onOpenExpression: (id: string) => void;
   onCloseExpression: () => void;
   onStatus: (id: string, status: Status) => void;
@@ -24,6 +25,9 @@ export default function MaterialsPage({ data, selectedId, expressionId, onSelect
   const [showFull, setShowFull] = useState(false);
   const [fragmentPage, setFragmentPage] = useState(1);
   const [deletePending, setDeletePending] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
   const selected = data.sources.find(s => s.id === selectedId);
   const expression = data.languageNodes.find(n => n.id === expressionId);
@@ -42,7 +46,14 @@ export default function MaterialsPage({ data, selectedId, expressionId, onSelect
   const snippets = [...groups];
   const pageCount = Math.max(1, Math.ceil(snippets.length / 15));
   const currentPage = Math.min(fragmentPage, pageCount);
-  useEffect(() => { setFragmentPage(1); setShowFull(false); setDeletePending(false); }, [selectedId]);
+  useEffect(() => { setFragmentPage(1); setShowFull(false); setDeletePending(false); setEditingTitle(false); setTitleDraft(""); }, [selectedId]);
+  async function saveTitle() {
+    if (!selected || !titleDraft.trim() || savingTitle) return;
+    setSavingTitle(true);
+    const saved = await onRename(selected.id, titleDraft);
+    setSavingTitle(false);
+    if (saved) setEditingTitle(false);
+  }
   useEffect(() => {
     if (expressionId && window.matchMedia("(max-width: 850px)").matches)
       panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -59,7 +70,16 @@ export default function MaterialsPage({ data, selectedId, expressionId, onSelect
       </button>
       {selected && <div className="material-detail-head">
         <span className="eyebrow">学习 {languageName(selected.language || "ja")}{selected.languages?.length ? ` · 原文 ${selected.languages.map(languageName).join(" / ")}` : ""} · {selected.type} · {selected.date}</span>
-        <div className="material-detail-title"><h2>{selected.title}</h2><button className="material-delete-button" onClick={() => setDeletePending(true)}><Trash2 size={15}/> 删除材料</button></div>
+        <div className="material-detail-title">
+          {editingTitle ? <div className="material-title-editor">
+            <input aria-label="材料名称" autoFocus maxLength={120} value={titleDraft}
+              onChange={event => setTitleDraft(event.target.value)}
+              onKeyDown={event => { if (event.key === "Enter") void saveTitle(); if (event.key === "Escape") setEditingTitle(false); }}/>
+            <button className="secondary" disabled={!titleDraft.trim() || savingTitle} onClick={() => void saveTitle()}>{savingTitle ? "保存中…" : "保存名称"}</button>
+            <button className="text-button" disabled={savingTitle} onClick={() => setEditingTitle(false)}>取消</button>
+          </div> : <div className="material-title-display"><h2>{selected.title}</h2><button className="material-rename-button" onClick={() => { setTitleDraft(selected.title); setEditingTitle(true); }}><Pencil size={15}/> 修改名称</button></div>}
+          <button className="material-delete-button" onClick={() => setDeletePending(true)}><Trash2 size={15}/> 删除材料</button>
+        </div>
         <p>{new Set(occurrences.map(o => o.nodeId)).size} 个从这份材料收藏的表达</p>
         {deletePending && <div className="material-delete-confirm" role="group" aria-label="确认删除材料">
           <strong>删除「{selected.title}」？</strong>
